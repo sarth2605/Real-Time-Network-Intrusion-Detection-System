@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NIDS | Cybersecurity Operations Center</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Chart.js and Socket.IO -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+</head>
+<body class="soc-body">
+
+    <div class="app-layout">
+        <!-- ============================================================== -->
+        <!-- SIDEBAR NAVIGATION                                             -->
+        <!-- ============================================================== -->
+        <aside class="soc-sidebar" id="socSidebar">
+            <!-- Brand Logo -->
+            <div class="sidebar-brand">
+                <div class="brand-shield">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                        <path d="M9 12l2 2 4-4"/>
+                    </svg>
+                </div>
+                <div class="brand-titles">
+                    <h2>NIDS SENTINEL</h2>
+                    <span>SOC Intrusion Monitor</span>
+                </div>
+            </div>
+
+            <!-- Engine Mode Status Indicator -->
+            <div class="sidebar-status-box">
+                <div class="status-indicator-pill">
+                    <span class="status-dot pulse-green" id="engineStatusDot"></span>
+                    <span class="status-text" id="engineStatusText">Active (Demo Mode)</span>
+                </div>
+                <div class="status-metric" id="sidebarFps">0 pkts/s</div>
+            </div>
+
+            <!-- Navigation Links -->
+            <nav class="sidebar-nav">
+                <div class="nav-section-label">MONITORING</div>
+                <a href="{{ url_for('dashboard') }}" class="nav-item active">
+                    <span class="nav-icon">📊</span>
+                    <span class="nav-label">SOC Dashboard</span>
+                    <span class="nav-badge badge-live">LIVE</span>
+                </a>
+                <a href="{{ url_for('alerts') }}" class="nav-item">
+                    <span class="nav-icon">🚨</span>
+                    <span class="nav-label">Security Alerts</span>
+                    <span class="nav-counter" id="sidebarAlertCount">{{ stats.total_alerts }}</span>
+                </a>
+                <a href="#packetStreamSection" class="nav-item">
+                    <span class="nav-icon">📡</span>
+                    <span class="nav-label">Packet Sniffer</span>
+                </a>
+
+                <div class="nav-section-label">CAPTURE CONTROLS</div>
+                <div class="sidebar-controls-card">
+                    <button class="btn-sidebar btn-sidebar-primary" id="btnLiveMode" title="Sniff real network traffic via Scapy">
+                        <span>▶ Start Live Capture</span>
+                    </button>
+                    <button class="btn-sidebar btn-sidebar-outline" id="btnSimMode" title="Run synthetic attack generator">
+                        <span>⚡ Run Demo Simulator</span>
+                    </button>
+                    <button class="btn-sidebar btn-sidebar-danger" id="btnStopCapture" title="Halt packet ingestion">
+                        <span>⏹ Stop Sniffer</span>
+                    </button>
+                    <button class="btn-sidebar btn-sidebar-secondary" id="btnClearData" title="Reset all current logs">
+                        <span>🔄 Reset Session</span>
+                    </button>
+                </div>
+
+                <div class="nav-section-label">DEMO SCENARIOS</div>
+                <div class="sidebar-controls-card">
+                    <button class="btn-sidebar btn-sim-scenario" data-scenario="normal" title="Simulate 15 normal packets">
+                        <span>🟢 Normal Traffic</span>
+                    </button>
+                    <button class="btn-sidebar btn-sim-scenario" data-scenario="failed_auth" title="Simulate failed SSH attempts (>5/60s)">
+                        <span>💥 Test Brute Force</span>
+                    </button>
+                    <button class="btn-sidebar btn-sim-scenario" data-scenario="port_scan" title="Simulate multi-port probe (>10/30s)">
+                        <span>🔍 Test Port Scan</span>
+                    </button>
+                    <button class="btn-sidebar btn-sim-scenario" data-scenario="high_volume" title="Simulate high rate surge (>100/60s)">
+                        <span>⚠️ Test High Volume</span>
+                    </button>
+                </div>
+
+                <div class="nav-section-label">SYSTEM</div>
+                <a href="{{ url_for('logout') }}" class="nav-item nav-item-logout">
+                    <span class="nav-icon">🔒</span>
+                    <span class="nav-label">Disconnect Analyst</span>
+                </a>
+            </nav>
+
+            <!-- Sidebar User Profile -->
+            <div class="sidebar-footer">
+                <div class="analyst-avatar">SOC</div>
+                <div class="analyst-info">
+                    <div class="analyst-name">{{ session.get('username', 'Analyst') }}</div>
+                    <div class="analyst-role">BCS Final Year Capstone</div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- ============================================================== -->
+        <!-- MAIN DASHBOARD CONTENT AREA                                    -->
+        <!-- ============================================================== -->
+        <div class="main-wrapper">
+
+            <!-- Top Header Bar -->
+            <header class="dashboard-header">
+                <div class="header-left">
+                    <button class="btn-icon mobile-menu-toggle" id="mobileMenuToggle" aria-label="Toggle Sidebar">
+                        ☰
+                    </button>
+                    <div>
+                        <h1 class="page-title">Cybersecurity Defense Dashboard</h1>
+                        <p class="page-subtitle">Passive Real-Time Network Packet Inspection & Attack Heuristics</p>
+                    </div>
+                </div>
+
+                <div class="header-right">
+                    <!-- Severity Summary Bar -->
+                    <div class="severity-quick-bar">
+                        <span class="sev-tag sev-tag-critical">CRITICAL: <strong id="kpiSevCrit">0</strong></span>
+                        <span class="sev-tag sev-tag-high">HIGH: <strong id="kpiSevHigh">0</strong></span>
+                        <span class="sev-tag sev-tag-medium">MEDIUM: <strong id="kpiSevMed">0</strong></span>
+                        <span class="sev-tag sev-tag-low">LOW: <strong id="kpiSevLow">0</strong></span>
+                    </div>
+                </div>
+            </header>
+
+            <main class="dashboard-content">
+
+                <!-- Educational Authorization Notice -->
+                <div class="cyber-banner">
+                    <span class="banner-icon">🛡️</span>
+                    <div class="banner-text">
+                        <strong>DEFENSIVE MONITORING ONLY:</strong> {{ notice }}
+                    </div>
+                </div>
+
+                <!-- Safe Threat Simulation Suite Banner -->
+                <div class="simulation-banner">
+                    <div class="sim-banner-left">
+                        <span class="sim-banner-icon">🧪</span>
+                        <div class="sim-banner-info">
+                            <span class="sim-banner-title">Safe Simulation Mode</span>
+                            <span class="sim-banner-subtitle">Simulate safe, in-memory events to test defensive detectors without external network probes</span>
+                        </div>
+                    </div>
+                    <div class="sim-banner-actions">
+                        <button class="btn-sim" data-scenario="normal" id="btnSimNormal" title="Simulate 15 normal traffic frames">
+                            <span>🟢 Normal Traffic</span>
+                        </button>
+                        <button class="btn-sim" data-scenario="failed_auth" id="btnSimBruteForce" title="Simulate failed SSH attempts (>5/60s)">
+                            <span>💥 Test Brute Force</span>
+                        </button>
+                        <button class="btn-sim" data-scenario="port_scan" id="btnSimPortScan" title="Simulate 14-port probe (>10/30s)">
+                            <span>🔍 Test Port Scan</span>
+                        </button>
+                        <button class="btn-sim" data-scenario="high_volume" id="btnSimHighVolume" title="Simulate rapid 105 packet flood (>100/60s)">
+                            <span>⚠️ Test High Volume</span>
+                        </button>
+                        <button class="btn-sim btn-sim-all" data-scenario="all" id="btnSimAll" title="Run comprehensive multi-scenario demonstration">
+                            <span>🚀 Full Suite</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- ========================================================== -->
+                <!-- 5 CORE DASHBOARD METRIC CARDS                              -->
+                <!-- ========================================================== -->
+                <section class="cards-grid">
+                    <!-- Card 1: Total Packets -->
+                    <div class="cyber-card card-glow-cyan">
+                        <div class="card-inner">
+                            <div class="card-header">
+                                <span class="card-title">Total Packets</span>
+                                <span class="card-icon icon-cyan">📦</span>
+                            </div>
+                            <div class="card-value" id="kpiTotalPackets">{{ stats.total_packets }}</div>
+                            <div class="card-footer">
+                                <span class="trend-text">Inspected frames</span>
+                                <span class="card-pill">All Protocols</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Card 2: Normal Traffic -->
+                    <div class="cyber-card card-glow-green">
+                        <div class="card-inner">
+                            <div class="card-header">
+                                <span class="card-title">Normal Traffic</span>
+                                <span class="card-icon icon-green">🛡️</span>
+                            </div>
+                            <div class="card-value" id="kpiNormalTraffic">{{ stats.normal_traffic }}</div>
+                            <div class="card-footer">
+                                <span class="trend-text text-green">Legitimate behavior</span>
+                                <span class="card-pill pill-green">Normal</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Card 3: Suspicious Activities -->
+                    <div class="cyber-card card-glow-amber">
+                        <div class="card-inner">
+                            <div class="card-header">
+                                <span class="card-title">Suspicious Activities</span>
+                                <span class="card-icon icon-amber">⚠️</span>
+                            </div>
+                            <div class="card-value" id="kpiSuspicious">{{ stats.suspicious_count }}</div>
+                            <div class="card-footer">
+                                <span class="trend-text text-amber">Rate & Volume Floods</span>
+                                <span class="card-pill pill-amber">Threshold Breaches</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Card 4: Brute Force Alerts -->
+                    <div class="cyber-card card-glow-red">
+                        <div class="card-inner">
+                            <div class="card-header">
+                                <span class="card-title">Brute Force Alerts</span>
+                                <span class="card-icon icon-red">💥</span>
+                            </div>
+                            <div class="card-value" id="kpiBruteForce">{{ stats.brute_force_count }}</div>
+                            <div class="card-footer">
+                                <span class="trend-text text-red">>5 auth fails / 60s</span>
+                                <span class="card-pill pill-red">Credential Attacks</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Card 5: Port Scan Alerts -->
+                    <div class="cyber-card card-glow-purple">
+                        <div class="card-inner">
+                            <div class="card-header">
+                                <span class="card-title">Port Scan Alerts</span>
+                                <span class="card-icon icon-purple">🔍</span>
+                            </div>
+                            <div class="card-value" id="kpiPortScan">{{ stats.port_scan_count }}</div>
+                            <div class="card-footer">
+                                <span class="trend-text text-purple">>10 ports / 30s</span>
+                                <span class="card-pill pill-purple">Reconnaissance</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ========================================================== -->
+                <!-- 3 CORE REAL-TIME CHARTS (CHART.JS)                         -->
+                <!-- ========================================================== -->
+                <section class="charts-grid-3">
+                    <!-- Chart 1: Network Traffic Activity Over Time -->
+                    <div class="chart-panel">
+                        <div class="panel-top">
+                            <div class="panel-heading">
+                                <h3>Network Traffic Velocity</h3>
+                                <span class="panel-sub">Packets / Sec over time</span>
+                            </div>
+                            <span class="stream-rate-badge" id="chartLiveRate">0 pkt/s</span>
+                        </div>
+                        <div class="chart-canvas-container">
+                            <canvas id="trafficTrendChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Chart 2: Attack Distribution -->
+                    <div class="chart-panel">
+                        <div class="panel-top">
+                            <div class="panel-heading">
+                                <h3>Attack Distribution</h3>
+                                <span class="panel-sub">Detected attack classifications</span>
+                            </div>
+                            <span class="chart-count-pill" id="totalAttacksBadge">0 attacks</span>
+                        </div>
+                        <div class="chart-canvas-container">
+                            <canvas id="attackDistributionChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Chart 3: Severity Distribution -->
+                    <div class="chart-panel">
+                        <div class="panel-top">
+                            <div class="panel-heading">
+                                <h3>Severity Distribution</h3>
+                                <span class="panel-sub">LOW &bull; MEDIUM &bull; HIGH &bull; CRITICAL</span>
+                            </div>
+                            <span class="chart-count-pill" id="totalSeverityBadge">0 alerts</span>
+                        </div>
+                        <div class="chart-canvas-container donut-container">
+                            <canvas id="severityDistributionChart"></canvas>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ========================================================== -->
+                <!-- RECENT SECURITY ALERTS TABLE                               -->
+                <!-- ========================================================== -->
+                <section class="panel-section">
+                    <div class="table-panel">
+                        <div class="panel-top">
+                            <div class="panel-heading">
+                                <div class="heading-with-badge">
+                                    <h3>Recent Security Alerts</h3>
+                                    <span class="live-pulse-badge">LIVE THREAT FEED</span>
+                                </div>
+                                <span class="panel-sub">Heuristic attack detections with severity classifications</span>
+                            </div>
+                            <div class="panel-actions">
+                                <a href="{{ url_for('alerts') }}" class="btn-link">View Full Audit Archive &rarr;</a>
+                            </div>
+                        </div>
+
+                        <div class="table-container">
+                            <table class="cyber-data-table" id="recentAlertsTable">
+                                <thead>
+                                    <tr>
+                                        <th>Alert ID</th>
+                                        <th>Timestamp</th>
+                                        <th>Attack Type</th>
+                                        <th>Attacker (Source IP)</th>
+                                        <th>Target</th>
+                                        <th>Severity</th>
+                                        <th>Investigation Summary</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="recentAlertsTableBody">
+                                    <tr id="emptyAlertsRow">
+                                        <td colspan="8" class="empty-state-cell">
+                                            No intrusion alerts detected in this session yet. Monitoring active.
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ========================================================== -->
+                <!-- LIVE PACKET SNIFFER STREAM TABLE                           -->
+                <!-- ========================================================== -->
+                <section class="panel-section" id="packetStreamSection">
+                    <div class="table-panel">
+                        <div class="panel-top">
+                            <div class="panel-heading">
+                                <div class="heading-with-badge">
+                                    <h3>Live Network Packet Stream</h3>
+                                    <span class="stream-badge" id="streamStatusBadge">STREAMING</span>
+                                </div>
+                                <span class="panel-sub">Dissected packet metadata arriving on monitored network interface</span>
+                            </div>
+                            <div class="panel-actions">
+                                <button class="btn-ghost" id="btnPauseStream">Pause Feed</button>
+                            </div>
+                        </div>
+
+                        <div class="table-container stream-container">
+                            <table class="cyber-data-table" id="livePacketTable">
+                                <thead>
+                                    <tr>
+                                        <th>Timestamp</th>
+                                        <th>Source IP</th>
+                                        <th>Destination IP</th>
+                                        <th>Protocol</th>
+                                        <th>Dst Port</th>
+                                        <th>Frame Size</th>
+                                        <th>Classification</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="livePacketTableBody">
+                                    <!-- Rows prepended live via JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+            </main>
+
+            <!-- Dashboard Footer -->
+            <footer class="soc-footer">
+                <p>Real-Time Network Intrusion Detection System &bull; Final Year BCS Project &bull; Defensive SOC Monitor</p>
+            </footer>
+
+        </div>
+    </div>
+
+    <!-- Page Specific Script -->
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>

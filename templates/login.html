@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NIDS SOC Portal | Administrator Authentication</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body class="auth-body">
+    <div class="auth-container">
+        <!-- Main Cybersecurity Login Card -->
+        <div class="auth-card cyber-card card-glow-cyan">
+            <div class="auth-header">
+                <div class="brand-shield auth-shield-large">
+                    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                        <path d="M9 12l2 2 4-4"/>
+                    </svg>
+                </div>
+                <h2>SOC Security Center</h2>
+                <p class="subtitle">Real-Time Network Intrusion Detection System</p>
+                <div class="auth-status-pill">
+                    <span class="status-dot pulse-green"></span>
+                    <span>DEFENSIVE ACCESS CONTROL</span>
+                </div>
+            </div>
+
+            <!-- Flash Error / Info Messages -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    <div class="flash-messages">
+                        {% for category, message in messages %}
+                            <div class="flash-alert flash-{{ category }}">
+                                <span class="flash-icon">
+                                    {% if category == 'danger' or category == 'error' %}⚠️
+                                    {% elif category == 'warning' %}🛡️
+                                    {% elif category == 'success' %}✅
+                                    {% else %}ℹ️{% endif %}
+                                </span>
+                                <span class="flash-text">{{ message }}</span>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
+
+            <!-- Login Form -->
+            <form action="{{ url_for('login', next=request.args.get('next', '')) }}" method="POST" class="auth-form" autocomplete="off">
+                <input type="hidden" name="next" value="{{ request.args.get('next', '') }}">
+
+                <div class="form-group">
+                    <label for="username">
+                        <span class="form-icon">👤</span>
+                        <span>Administrator Username</span>
+                    </label>
+                    <input
+                        type="text"
+                        id="username"
+                        name="username"
+                        class="cyber-input"
+                        placeholder="e.g. admin"
+                        required
+                        autofocus
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label for="password">
+                        <span class="form-icon">🔑</span>
+                        <span>Password</span>
+                    </label>
+                    <input
+                        type="password"
+                        id="password"
+                        name="password"
+                        class="cyber-input"
+                        placeholder="••••••••••••"
+                        required
+                    >
+                </div>
+
+                <button type="submit" class="btn-cyber btn-cyber-primary btn-block btn-auth">
+                    <span>Authenticate Session</span>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                        <polyline points="12 5 19 12 12 19"></polyline>
+                    </svg>
+                </button>
+            </form>
+
+            <div class="auth-footer">
+                <div class="credentials-hint">
+                    <span class="hint-label">Default Access:</span>
+                    <code>admin</code> / <code>admin123</code>
+                    <span class="hint-sub">(Configurable via env vars or <code>setup_admin.py</code>)</span>
+                </div>
+                <div class="academic-badge">BCS Final Year Capstone Project</div>
+            </div>
+        </div>
+
+        <!-- Educational Authorization Notice -->
+        <div class="auth-disclaimer">
+            <span class="disclaimer-icon">🛡️</span>
+            <span><strong>Defensive Monitoring:</strong> {{ notice }}</span>
+        </div>
+    </div>
+</body>
+</html>

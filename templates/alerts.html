@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NIDS | Security Alerts Management</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Socket.IO for real-time live alert updates -->
+    <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+</head>
+<body class="soc-body">
+
+    <div class="app-layout">
+        <!-- ============================================================== -->
+        <!-- SIDEBAR NAVIGATION                                             -->
+        <!-- ============================================================== -->
+        <aside class="soc-sidebar" id="socSidebar">
+            <!-- Brand Logo -->
+            <div class="sidebar-brand">
+                <div class="brand-shield">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                        <path d="M9 12l2 2 4-4"/>
+                    </svg>
+                </div>
+                <div class="brand-titles">
+                    <h2>NIDS SENTINEL</h2>
+                    <span>SOC Intrusion Monitor</span>
+                </div>
+            </div>
+
+            <!-- Engine Mode Status Indicator -->
+            <div class="sidebar-status-box">
+                <div class="status-indicator-pill">
+                    <span class="status-dot pulse-green" id="engineStatusDot"></span>
+                    <span class="status-text" id="engineStatusText">Alert Feed Live</span>
+                </div>
+                <div class="status-metric" id="sidebarAlertPill">{{ stats.total_alerts }} alerts</div>
+            </div>
+
+            <!-- Navigation Links -->
+            <nav class="sidebar-nav">
+                <div class="nav-section-label">MONITORING</div>
+                <a href="{{ url_for('dashboard') }}" class="nav-item">
+                    <span class="nav-icon">📊</span>
+                    <span class="nav-label">SOC Dashboard</span>
+                </a>
+                <a href="{{ url_for('alerts') }}" class="nav-item active">
+                    <span class="nav-icon">🚨</span>
+                    <span class="nav-label">Security Alerts</span>
+                    <span class="nav-badge badge-live">LIVE</span>
+                </a>
+                <a href="{{ url_for('dashboard') }}#packetStreamSection" class="nav-item">
+                    <span class="nav-icon">📡</span>
+                    <span class="nav-label">Packet Sniffer</span>
+                </a>
+
+                <div class="nav-section-label">QUICK ACTIONS</div>
+                <div class="sidebar-controls-card">
+                    <button class="btn-sidebar btn-sidebar-primary" id="btnExportCSV">
+                        <span>📥 Export Audit (CSV)</span>
+                    </button>
+                    <a href="{{ url_for('dashboard') }}" class="btn-sidebar btn-sidebar-outline" style="text-decoration:none; text-align:center;">
+                        <span>&larr; Return to Dashboard</span>
+                    </a>
+                </div>
+
+                <div class="nav-section-label">SYSTEM</div>
+                <a href="{{ url_for('logout') }}" class="nav-item nav-item-logout">
+                    <span class="nav-icon">🔒</span>
+                    <span class="nav-label">Disconnect Analyst</span>
+                </a>
+            </nav>
+
+            <!-- Sidebar User Profile -->
+            <div class="sidebar-footer">
+                <div class="analyst-avatar">SOC</div>
+                <div class="analyst-info">
+                    <div class="analyst-name">{{ session.get('username', 'Analyst') }}</div>
+                    <div class="analyst-role">BCS Final Year Capstone</div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- ============================================================== -->
+        <!-- MAIN CONTENT WRAPPER                                           -->
+        <!-- ============================================================== -->
+        <div class="main-wrapper">
+
+            <!-- Top Header Bar -->
+            <header class="dashboard-header">
+                <div class="header-left">
+                    <button class="btn-icon mobile-menu-toggle" id="mobileMenuToggle" aria-label="Toggle Sidebar">
+                        ☰
+                    </button>
+                    <div>
+                        <h1 class="page-title">Security Incident & Alerts Archive</h1>
+                        <p class="page-subtitle">Historical Audit Trail & Real-Time Intrusion Incident Management</p>
+                    </div>
+                </div>
+
+                <div class="header-right">
+                    <!-- Quick Severity Summary Bar -->
+                    <div class="severity-quick-bar">
+                        <span class="sev-tag sev-tag-critical">CRITICAL: <strong id="headerSevCrit">{{ stats.severity_breakdown.CRITICAL }}</strong></span>
+                        <span class="sev-tag sev-tag-high">HIGH: <strong id="headerSevHigh">{{ stats.severity_breakdown.HIGH }}</strong></span>
+                        <span class="sev-tag sev-tag-medium">MEDIUM: <strong id="headerSevMed">{{ stats.severity_breakdown.MEDIUM }}</strong></span>
+                        <span class="sev-tag sev-tag-low">LOW: <strong id="headerSevLow">{{ stats.severity_breakdown.LOW }}</strong></span>
+                    </div>
+                </div>
+            </header>
+
+            <main class="dashboard-content">
+
+                <!-- Educational Authorization Notice -->
+                <div class="cyber-banner">
+                    <span class="banner-icon">🛡️</span>
+                    <div class="banner-text">
+                        <strong>DEFENSIVE MONITORING ONLY:</strong> {{ notice }}
+                    </div>
+                </div>
+
+                <!-- ========================================================== -->
+                <!-- 5 SEVERITY & INCIDENT KPI CARDS                            -->
+                <!-- ========================================================== -->
+                <section class="cards-grid">
+                    <!-- Card 1: Total Alerts Recorded -->
+                    <div class="cyber-card card-glow-cyan" id="cardTotalAlerts">
+                        <div class="card-inner">
+                            <div class="card-header">
+                                <span class="card-title">Total Incidents</span>
+                                <span class="card-icon icon-cyan">🚨</span>
+                            </div>
+                            <div class="card-value" id="kpiTotalAlerts">{{ stats.total_alerts }}</div>
+                            <div class="card-footer">
+                                <span class="trend-text">All classifications</span>
+                                <span class="card-pill">Database Total</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Card 2: CRITICAL Alerts -->
+                    <div class="cyber-card card-glow-red" id="cardSevCrit">
+                        <div class="card-inner">
+                            <div class="card-header">
+                                <span class="card-title">Critical Severity</span>
+                                <span class="card-icon icon-red">⚡</span>
+                            </div>
+                            <div class="card-value" id="kpiCardCrit">{{ stats.severity_breakdown.CRITICAL }}</div>
+                            <div class="card-footer">
+                                <span class="trend-text text-red">Immediate Attention</span>
+                                <span class="card-pill pill-red">CRITICAL</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Card 3: HIGH Alerts -->
+                    <div class="cyber-card card-glow-amber" id="cardSevHigh">
+                        <div class="card-inner">
+                            <div class="card-header">
+                                <span class="card-title">High Severity</span>
+                                <span class="card-icon icon-amber">🔥</span>
+                            </div>
+                            <div class="card-value" id="kpiCardHigh">{{ stats.severity_breakdown.HIGH }}</div>
+                            <div class="card-footer">
+                                <span class="trend-text text-amber">Confirmed Attacks</span>
+                                <span class="card-pill pill-amber">HIGH</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Card 4: MEDIUM Alerts -->
+                    <div class="cyber-card card-glow-purple" id="cardSevMed">
+                        <div class="card-inner">
+                            <div class="card-header">
+                                <span class="card-title">Medium Severity</span>
+                                <span class="card-icon icon-purple">⚠️</span>
+                            </div>
+                            <div class="card-value" id="kpiCardMed">{{ stats.severity_breakdown.MEDIUM }}</div>
+                            <div class="card-footer">
+                                <span class="trend-text text-purple">Heuristic Anomaly</span>
+                                <span class="card-pill pill-purple">MEDIUM</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Card 5: LOW Alerts -->
+                    <div class="cyber-card card-glow-blue" id="cardSevLow">
+                        <div class="card-inner">
+                            <div class="card-header">
+                                <span class="card-title">Low Severity</span>
+                                <span class="card-icon icon-cyan">ℹ️</span>
+                            </div>
+                            <div class="card-value" id="kpiCardLow">{{ stats.severity_breakdown.LOW }}</div>
+                            <div class="card-footer">
+                                <span class="trend-text" style="color:#38bdf8;">Informational</span>
+                                <span class="card-pill" style="color:#38bdf8; background:rgba(56,189,248,0.1);">LOW</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ========================================================== -->
+                <!-- INTERACTIVE SEARCH & FILTER TOOLBAR                        -->
+                <!-- ========================================================== -->
+                <section class="alerts-toolbar-card">
+                    <div class="toolbar-header">
+                        <div class="toolbar-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                            </svg>
+                            <span>Filter & Search Security Incidents</span>
+                        </div>
+                        <span class="filter-result-badge" id="filterResultBadge">
+                            Showing {{ alerts|length }} alerts
+                        </span>
+                    </div>
+
+                    <div class="toolbar-controls-grid">
+                        <!-- 1. Search Box -->
+                        <div class="control-field">
+                            <label for="filterSearch">Search Incidents</label>
+                            <div class="cyber-input-box">
+                                <span class="input-icon">🔍</span>
+                                <input type="text" id="filterSearch" class="cyber-input" placeholder="Search IP address, Attack type, Description...">
+                            </div>
+                        </div>
+
+                        <!-- 2. Severity Dropdown -->
+                        <div class="control-field">
+                            <label for="filterSeverity">Severity Level</label>
+                            <select id="filterSeverity" class="cyber-select">
+                                <option value="ALL">All Severities</option>
+                                <option value="CRITICAL">CRITICAL</option>
+                                <option value="HIGH">HIGH</option>
+                                <option value="MEDIUM">MEDIUM</option>
+                                <option value="LOW">LOW</option>
+                            </select>
+                        </div>
+
+                        <!-- 3. Attack Type Dropdown -->
+                        <div class="control-field">
+                            <label for="filterType">Attack Classification</label>
+                            <select id="filterType" class="cyber-select">
+                                <option value="ALL">All Attack Types</option>
+                                <option value="Port Scan">Port Scan</option>
+                                <option value="Brute Force">Brute Force</option>
+                                <option value="Suspicious Activity">Suspicious Activity</option>
+                            </select>
+                        </div>
+
+                        <!-- 4. Reset Filters Button -->
+                        <div class="control-field">
+                            <button class="btn-cyber btn-cyber-outline" id="btnResetFilters" title="Clear search and filters">
+                                <span>🔄 Reset</span>
+                            </button>
+                        </div>
+
+                        <!-- 5. Export CSV Button -->
+                        <div class="control-field">
+                            <button class="btn-cyber btn-cyber-primary" id="btnExportCSVTable" title="Download filtered alerts as CSV">
+                                <span>📥 Export CSV</span>
+                            </button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ========================================================== -->
+                <!-- FULL ALERTS DATA TABLE                                     -->
+                <!-- ========================================================== -->
+                <section class="panel-section">
+                    <div class="table-panel">
+                        <div class="table-panel-header">
+                            <div class="panel-heading">
+                                <div class="heading-with-badge">
+                                    <h3>Security Alerts Log</h3>
+                                    <span class="live-pulse-badge">REAL-TIME SYNC</span>
+                                </div>
+                                <span class="panel-sub">Recent intrusion incidents sorted chronologically (Newest first)</span>
+                            </div>
+                        </div>
+
+                        <div class="table-container">
+                            <table class="cyber-data-table" id="alertsTable">
+                                <thead>
+                                    <tr>
+                                        <th>Alert ID</th>
+                                        <th>Attack Type</th>
+                                        <th>Source IP</th>
+                                        <th>Destination IP</th>
+                                        <th>Severity</th>
+                                        <th>Description</th>
+                                        <th>Timestamp</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="alertsTableBody">
+                                    {% for alert in alerts %}
+                                    <tr data-id="{{ alert.id }}"
+                                        data-severity="{{ alert.severity|upper }}"
+                                        data-type="{{ alert.attack_type }}"
+                                        data-src-ip="{{ alert.source_ip }}"
+                                        data-dst-ip="{{ alert.destination_ip }}"
+                                        data-desc="{{ alert.description|lower }}">
+                                        <td class="mono-ip">#{{ alert.id }}</td>
+                                        <td><strong class="attack-title">{{ alert.attack_type }}</strong></td>
+                                        <td class="mono-ip text-red">{{ alert.source_ip }}</td>
+                                        <td class="mono-ip">
+                                            {{ alert.destination_ip }}{% if alert.target_port %}:{{ alert.target_port }}{% endif %}
+                                        </td>
+                                        <td>
+                                            <span class="badge-sev badge-sev-{{ alert.severity|lower }}">{{ alert.severity|upper }}</span>
+                                        </td>
+                                        <td class="investigation-summary">{{ alert.description }}</td>
+                                        <td class="mono-ip">{{ alert.timestamp }}</td>
+                                        <td><span class="status-chip-active">{{ alert.status or 'Active' }}</span></td>
+                                    </tr>
+                                    {% else %}
+                                    <tr id="emptyAlertsRow">
+                                        <td colspan="8" class="empty-state-cell">
+                                            No intrusion alerts recorded in the database yet. Defensive monitoring active.
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                    <tr id="noMatchRow" style="display: none;">
+                                        <td colspan="8" class="empty-state-cell">
+                                            No security alerts match the selected search and filter criteria.
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+            </main>
+
+            <!-- Dashboard Footer -->
+            <footer class="soc-footer">
+                <p>Real-Time Network Intrusion Detection System &bull; Final Year BCS Project &bull; Security Log Archive</p>
+            </footer>
+
+        </div>
+    </div>
+
+    <!-- Page Specific Script -->
+    <script src="{{ url_for('static', filename='js/alerts.js') }}"></script>
+</body>
+</html>
